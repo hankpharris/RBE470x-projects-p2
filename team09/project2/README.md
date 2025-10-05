@@ -38,3 +38,35 @@ In the fourth variant of this scenario, an aggressive monster is present:
 
 In the fifth variant of this scenario, two monsters are present: an aggressive
 one and a stupid one.
+
+## Reinforcement Learning (Stable Baselines3) ##
+
+A Gym-compatible environment for variant 5 is provided in `team09/project2/sb3_variant5_env.py`
+so you can train reinforcement learning agents with Stable Baselines3.
+
+1. Install the dependencies (for example inside a virtualenv):
+
+       pip install stable-baselines3 gymnasium numpy
+
+2. Train a PPO agent (this will create/update the model at the given path):
+
+       python run_sb3_variant5.py train models/variant5_ppo.zip --timesteps 50000
+
+3. Evaluate a saved model (use `--render` to print the board to the console):
+
+       python run_sb3_variant5.py eval models/variant5_ppo.zip --episodes 5 --render
+
+You can customise rewards, observation encoding, or action definitions inside
+`sb3_variant5_env.py` to experiment with alternative training setups. The
+default configuration already adds shaping rewards that encourage moving toward
+the exit, placing bombs, and destroying walls/monsters so policies learn to
+clear paths more quickly.
+
+To watch the trained agent in the pygame GUI:
+
+1. Place your trained model at `team09/project2/models/variant5_ppo.zip`
+   (original location) or `team09/models/variant5_ppo.zip`, or export an
+   alternative path via the `SB3_MODEL_PATH` environment variable.
+2. Run `python variant5.py` as usual and press `Enter` to advance frames. The
+   script now pulls in `team09/ppo_testcharacter.py`, which loads the PPO
+   policy automatically.

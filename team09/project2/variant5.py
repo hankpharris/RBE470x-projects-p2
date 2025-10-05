@@ -1,7 +1,10 @@
 # This is necessary to find the main code
 import sys
-sys.path.insert(0, '../../bomberman')
-sys.path.insert(1, '..')
+from pathlib import Path
+
+_THIS_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(_THIS_DIR.parent.parent / 'Bomberman'))
+sys.path.insert(1, str(_THIS_DIR.parent))
 
 # Import necessary stuff
 import random
@@ -10,11 +13,11 @@ from monsters.stupid_monster import StupidMonster
 from monsters.selfpreserving_monster import SelfPreservingMonster
 
 # TODO This is your code!
-sys.path.insert(1, '../teamNN')
-from testcharacter import TestCharacter
+sys.path.insert(1, '../team09')
+from ppo_testcharacter import TestCharacter
 
 # Create the game
-random.seed(123) # TODO Change this if you want different random choices
+random.seed() # TODO Change this if you want different random choices
 g = Game.fromfile('map.txt')
 g.add_monster(StupidMonster("stupid", # name
                             "S",      # avatar
@@ -33,4 +36,4 @@ g.add_character(TestCharacter("me", # name
 ))
 
 # Run!
-g.go()
+g.go(wait=150)
