@@ -62,11 +62,13 @@ default configuration already adds shaping rewards that encourage moving toward
 the exit, placing bombs, and destroying walls/monsters so policies learn to
 clear paths more quickly.
 
-To watch the trained agent in the pygame GUI:
+## Playback ##
 
-1. Place your trained model at `team09/project2/models/variant5_ppo.zip`
-   (original location) or `team09/models/variant5_ppo.zip`, or export an
-   alternative path via the `SB3_MODEL_PATH` environment variable.
-2. Run `python variant5.py` as usual and press `Enter` to advance frames. The
-   script now pulls in `team09/ppo_testcharacter.py`, which loads the PPO
-   policy automatically.
+`variant5.py` loads the PPO-powered character in `team09/ppo_testcharacter.py`
+by default. After training a model, run the pygame visualisation with:
+
+    python variant5.py --step-wait 150
+
+You can experiment with the heuristic agent in
+`team09/strategic_testcharacter.py` by swapping the import manually if you want
+to compare behaviours.

@@ -23,7 +23,18 @@ def train(model_path: Path, timesteps: int, resume_from: Optional[Path] = None) 
     if resume_from and resume_from.exists():
         model = PPO.load(str(resume_from), env=env, print_system_info=True)
     else:
-        model = PPO("MlpPolicy", env, verbose=1)
+        model = PPO(
+            "MlpPolicy",
+            env,
+            verbose=1,
+            gamma=0.99,
+            learning_rate=3e-4,
+            n_steps=2048,
+            batch_size=64,
+            n_epochs=10,
+            gae_lambda=0.95,
+            clip_range=0.2,
+        )
     model.learn(total_timesteps=timesteps)
     model.save(str(model_path))
     env.close()

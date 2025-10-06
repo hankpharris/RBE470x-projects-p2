@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
+import math
+
 import numpy as np
 
 try:  # Prefer gymnasium when available (Stable Baselines3 >= 2.0)
@@ -95,15 +97,21 @@ class BombermanVariant5Env(gym.Env):
         self.world: Optional[RealWorld] = None
         self.character: Optional[RLCharacter] = None
         self._last_score: float = 0.0
-        self._prev_dist_to_exit: float = 0.0
 
-        # Reward-shaping parameters tuned for encouraging bomb usage and progress
-        self._step_penalty: float = 0.6
-        self._bomb_place_bonus: float = 1.3
-        self._distance_reward_scale: float = 1.5
-        self._wall_destroy_bonus: float = 2.0
-        self._monster_kill_bonus: float = 175.0
-        self._self_bomb_penalty: float = 1200.0
+        # Exit progress shaping parameters
+        self._prev_exit_decay: float = 0.0
+        self._exit_decay_rate: float = 0.35  # controls exponential falloff
+        self._exit_progress_base: float = 12.0  # medium baseline reward
+
+        # Event-driven reward magnitudes
+        self._wall_destroy_reward: float = 6.0  # low
+        self._monster_kill_reward: float = 150.0  # high
+        self._self_bomb_penalty: float = 600.0  # very high penalty
+
+        # Additional outcome shaping
+        self._step_penalty: float = 0.2
+        self._death_penalty: float = 200.0
+        self._exit_completion_reward: float = 300.0
 
     # ---------------------------------------------------------------------
     # Gym / Gymnasium API
@@ -121,7 +129,10 @@ class BombermanVariant5Env(gym.Env):
         self.world.add_monster(StupidMonster("stupid", "S", 3, 5))
         self.world.add_monster(SelfPreservingMonster("aggressive", "A", 3, 13, 2))
         self._last_score = self.world.scores[self.character.name]
-        self._prev_dist_to_exit = self._distance_to_exit()
+
+        # Initialize rolling state
+        dist_to_exit = self._manhattan_distance_to_exit()
+        self._prev_exit_decay = self._compute_exit_decay(dist_to_exit)
 
         observation = self._collect_observation()
         info: Dict[str, float] = {"score": self._last_score}
@@ -150,29 +161,28 @@ class BombermanVariant5Env(gym.Env):
 
         # Update scores-based reward signal
         current_score = self.world.scores.get(self.character.name, self._last_score)
-        reward = current_score - self._last_score
-        if terminated:
-            reward += 100.0 if success else -100.0
-        elif truncated:
-            reward -= 10.0
-        self._last_score = current_score
+        reward = -self._step_penalty
 
-        # Reward shaping to encourage progress and bomb usage
-        shaping = 0.0
-        if place_bomb and self._is_bomb_context_useful():
-            shaping += self._bomb_place_bonus
-        dist_to_exit = self._distance_to_exit()
-        shaping += (self._prev_dist_to_exit - dist_to_exit) * self._distance_reward_scale
-        self._prev_dist_to_exit = dist_to_exit
-        shaping -= self._step_penalty
+        # Exit-seeking reward: exponential bonus for reducing distance to exit
+        dist_to_exit = self._manhattan_distance_to_exit()
+        current_exit_decay = self._compute_exit_decay(dist_to_exit)
+        reward += self._exit_progress_base * (current_exit_decay - self._prev_exit_decay)
+        self._prev_exit_decay = current_exit_decay
+
         for ev in events:
             if ev.tpe == Event.BOMB_HIT_WALL and ev.character is self.character:
-                shaping += self._wall_destroy_bonus
+                reward += self._wall_destroy_reward
             elif ev.tpe == Event.BOMB_HIT_MONSTER and ev.character is self.character:
-                shaping += self._monster_kill_bonus
+                reward += self._monster_kill_reward
             elif ev.tpe == Event.BOMB_HIT_CHARACTER and ev.other is self.character:
-                shaping -= self._self_bomb_penalty
-        reward += shaping
+                reward -= self._self_bomb_penalty
+            elif ev.tpe == Event.CHARACTER_FOUND_EXIT and ev.character is self.character:
+                reward += self._exit_completion_reward
+
+        if terminated and not success:
+            reward -= self._death_penalty
+
+        self._last_score = current_score
 
         # Prepare next-step decisions for all entities
         self.world.next_decisions()
@@ -305,28 +315,15 @@ class BombermanVariant5Env(gym.Env):
             "grid": rows,
         }
 
-    def _distance_to_exit(self) -> float:
-        if self.world is None or self.character is None:
+    def _compute_exit_decay(self, distance: Optional[int]) -> float:
+        if distance is None:
             return 0.0
-        if not self.world.exitcell:
-            return 0.0
+        return math.exp(-self._exit_decay_rate * float(distance))
+
+    def _manhattan_distance_to_exit(self) -> Optional[int]:
+        if self.world is None or self.character is None or not self.world.exitcell:
+            return None
         ex, ey = self.world.exitcell
-        return float(abs(ex - self.character.x) + abs(ey - self.character.y))
-
-    def _is_bomb_context_useful(self) -> bool:
-        assert self.world is not None and self.character is not None
-        cx, cy = self.character.x, self.character.y
-        for dx in (-1, 0, 1):
-            for dy in (-1, 0, 1):
-                if dx == 0 and dy == 0:
-                    continue
-                nx = cx + dx
-                ny = cy + dy
-                if nx < 0 or ny < 0 or nx >= self.world.width() or ny >= self.world.height():
-                    continue
-                if self.world.wall_at(nx, ny) or self.world.monsters_at(nx, ny):
-                    return True
-        return False
-
+        return int(abs(ex - self.character.x) + abs(ey - self.character.y))
 
 __all__ = ["BombermanVariant5Env", "RLCharacter"]
