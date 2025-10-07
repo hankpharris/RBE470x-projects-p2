@@ -26,9 +26,9 @@ g.add_monster(StupidMonster("stupid", # name
 #                               0, 0  # position
 # ))
 
-from character2 import Character2
+from character5 import Character5
 
-g.add_character(Character2("me", # name
+g.add_character(Character5("me", # name
                            "C",  # avatar
                            0, 0  # position
 ))

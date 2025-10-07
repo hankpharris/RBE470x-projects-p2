@@ -32,9 +32,9 @@ g.add_monster(SelfPreservingMonster("aggressive", # name
 #                               0, 0  # position
 # ))
 
-from character4 import Character4
+from character5 import Character5
 
-g.add_character(Character4("me", # name
+g.add_character(Character5("me", # name
                            "C",  # avatar
                            0, 0  # position
 ))

@@ -27,9 +27,9 @@ g.add_monster(SelfPreservingMonster("selfpreserving", # name
 #                               0, 0  # position
 # ))
 
-from character2 import Character2
+from character6 import Character6
 
-g.add_character(Character2("me", # name
+g.add_character(Character6("me", # name
                            "C",  # avatar
                            0, 0  # position
 ))

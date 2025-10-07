@@ -1,0 +1,26 @@
+Character 5 and Character 6 – Developments Summary
+
+Date: 2025-10-07
+
+Overview
+-Characters 3 and 4 are two variants of our approach to project 1, a* to goal, seperate a* to flee to safety, bfs escape if character path to goal is shorter than monsters. most important mod is coverage for non-completeeable paths, slection of the most optimal path by a* which is reachable
+- Character5 is derived from character4. It preserves all original behaviors (flee logic, bomb placement/cooldown, A* base pathing, south fallback). It adds a model-based pivot that activates only when the agent is NOT fleeing and is within the bottom training band rows (y in {15,16,17}). When this condition holds, Character5 uses a trained DQN to pick the movement for that tick; otherwise it follows character4 logic.
+- Character6 is derived from character3. It behaves exactly like character3 except it adds the same model-based pivot as Character5: when NOT fleeing and in rows {15,16,17}, it uses the DQN for one-step movement; otherwise it follows character3’s logic.
+
+DQN Details
+- Default model path: teamNN/project2/models/best_model.zip
+- Override: pass model_path=... to Character5/Character6 constructors if you store the model elsewhere.
+- The DQN outputs movement-only actions; bombs remain governed by the hand-crafted logic in characters.
+
+Notes on Prior Design
+- An earlier approach used the model under an exit race-advantage condition. This has been reverted. Character5 now pivots to the model only by row band and only when not in flee mode.
+
+Integration Tips
+- To test Character5 or Character6 in a variant, import and instantiate them in your variant file (e.g., teamNN/project2/variantX.py) similarly to other characters.
+- Ensure the model file exists at the default location or pass an explicit model_path.
+
+Files Added/Updated
+- teamNN/character5.py: character4 clone with DQN pivot in rows {15,16,17} when not fleeing.
+- teamNN/character6.py: character3 clone with the same DQN pivot condition.
+
+

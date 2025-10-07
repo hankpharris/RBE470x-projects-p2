@@ -1,10 +1,10 @@
-"""Character5: Based on Character4 but uses DQN during exit race advantage.
+"""Character5: Based on Character4 but switches to DQN only in bottom rows.
 
-When the agent has a strictly shorter path to the exit than any monster
-(_has_exit_race_advantage), it will bypass A*/BFS pathing and instead use the
-trained DQN model (movement-only) to pick the next action. In all other
-situations, it mirrors Character4 behavior (flee logic, A* base pathing,
-south fallback, bomb restrictions, etc.).
+This character mirrors Character4 (flee logic, A*, south fallback, etc.).
+Additionally, once the agent is in the training band rows y ∈ {15,16,17}, it
+uses the trained DQN model (movement-only) to pick the next action for that
+tick, provided it is not in the flee state. Outside that band, or while
+fleeing, it behaves exactly like Character4.
 """
 
 import sys
@@ -71,18 +71,18 @@ class Character5(CharacterEntity):
 			self.fleeing = True
 			next_pos = self._choose_flee_move(wrld, exit_pos, monsters)
 		else:
-			# If we can out-race monsters to the exit, use DQN to pick the move directly
-			if exit_pos is not None and race_advantage:
+			# If inside bottom training band, prefer DQN guidance for navigation
+			if self._in_bottom_band(wrld):
 				self._ensure_model()
 				if self.model is not None:
 					obs = build_observation(wrld, self.name)
 					action, _ = self.model.predict(obs, deterministic=True)
 					dx, dy, bomb = decode_action(int(action))
-					print(f"[Character5] approach=RACE_DQN cur=({self.x},{self.y}) next=({self.x+dx},{self.y+dy}) monsters={monsters}")
+					print(f"[Character5] approach=MODEL_BOTTOM cur=({self.x},{self.y}) next=({self.x+dx},{self.y+dy}) monsters={monsters}")
 					self.move(dx, dy)
 					return
-				# Fallback to A* if model unavailable
-			
+			# Otherwise, fall back to Character4's base navigation
+
 			# Base A* movement to exit
 			next_pos = None
 			if exit_pos is not None:
@@ -121,6 +121,10 @@ class Character5(CharacterEntity):
 		approach = 'FLEEING' if active_flee else 'BASE'
 		print(f"[Character5] approach={approach} cur=({self.x},{self.y}) next=({self.x+dx},{self.y+dy}) monsters={monsters}")
 		self.move(dx, dy)
+
+	def _in_bottom_band(self, wrld):
+		# Switch to DQN only within the bottom training band rows
+		return self.y in (15, 16, 17)
 
 	def _south_fallback_move(self, wrld):
 		# Prefer straight south, then diagonals (SE, SW) if safe and within bounds
