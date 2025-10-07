@@ -24,3 +24,115 @@ Files Added/Updated
 - teamNN/character6.py: character3 clone with the same DQN pivot condition.
 
 
+
+Project Architecture Overview
+-----------------------------
+- Engine core (`Bomberman/`):
+  - `world.py`: core game state, grid, entities, ticking, events, scores.
+  - `real_world.py`: live world mutation each tick; calls `next_decisions()` and advances state; manages events.
+  - `sensed_world.py`: read-only clone for AI; prevents peeking; supports forward simulation via `next()`.
+  - `entity.py`: entity definitions (`CharacterEntity`, `MonsterEntity`, `BombEntity`, `ExplosionEntity`, etc.).
+  - `game.py`: pygame GUI, sprite loading, loop (`go`), `display_gui()`, `done()` lifecycle, add characters/monsters.
+  - `monsters/`: baseline monster behaviors (`stupid_monster.py`, `selfpreserving_monster.py`).
+- Team code (`teamNN/`):
+  - Characters (`character1.py`..`character6.py`, `interactivecharacter.py`), plus `testcharacter.py` template.
+  - Project 1 (`teamNN/project1/`): baseline variants and map.
+  - Project 2 (`teamNN/project2/`): RL environment, training, evaluation:
+    - `env.py`: `BombermanProject2Env` (Gymnasium); `RLCharacter` bridges actions to engine; controlled start placement.
+    - `utils.py`: map parsing, observation builder (6-channel grid + global features), action decoding.
+    - `train_dqn.py`: SB3 DQN training with tensorboard/eval callbacks.
+    - `run_variants.py`: batch runner for variants 0–5; headless option for speed; reports success rate.
+    - `models/`: saved checkpoints (`best_model/`, `final.zip`).
+    - `tb/`: TensorBoard logs per run.
+  - Maps: `project2/map.txt` (random gaps) and `project2/map0.txt` (banded walls and bottom start focus).
+
+Game/Simulation Flow
+--------------------
+1) `Game.fromfile(map)` builds `RealWorld` with walls/exit per ASCII map.
+2) Characters/monsters are added via `Game.add_character/add_monster`.
+3) Loop each tick: `world.next()` updates timers, explosions, bombs, moves, scores; `display_gui()` redraws; `world.next_decisions()` asks each AI to `do(...)` on a `SensedWorld` clone to set next moves/bombs.
+4) Termination via `Game.done()`: user quit, time over, no characters, or last-man-standing with zero remaining.
+
+RL Environment Details (Project 2)
+----------------------------------
+- Observation: height×width×6 tensor flattened + 5 global features (dx,dy to exit; last dx,dy,bomb). Layers: walls, exit, bombs (normalized timer), explosions (normalized timer), player position, predicted unsafe next tiles.
+- Action space: 9 discrete movement actions (8-neighborhood + stay). Bombs are externally governed in characters; training focuses on navigation.
+- Start placement: bottom-section placement by default; determinism or randomization configurable.
+- Reward: shaped mainly by progress towards exit (distance reduction), optional depth milestones if `simple_reward=False`.
+- Episode end: agent death (terminated) or time expiry (truncated).
+
+Character Integration (Team)
+----------------------------
+- `character5.py` and `character6.py` wrap hand-crafted logic with a DQN assist in bottom rows {15,16,17} when not fleeing; bombs remain rule-based.
+- `variantX.py` scripts create a `Game`, add characters/monsters, then `g.go(...)`.
+- `run_variants.py` reproduces the variant setups programmatically and runs repeated episodes with optional headless rendering.
+
+Usage: Environment Setup and Requirements
+----------------------------------------
+- Python 3.10+ recommended. Create and activate a virtual environment.
+  PowerShell (Windows):
+    python -m venv .venv
+    .\.venv\Scripts\Activate.ps1
+  Upgrade pip:
+    python -m pip install --upgrade pip
+- Install requirements from `requirements.txt`:
+    python -m pip install -r requirements.txt
+
+Requirements (copied from requirements.txt)
+-------------------------------------------
+colorama==0.4.6
+pygame==2.6.1
+numpy>=1.26.4
+gymnasium==0.29.1
+stable-baselines3>=2.7.0
+torch>=2.2.0
+tensorboard>=2.16.2
+
+Usage: Run Baseline Variants (GUI)
+----------------------------------
+- From `teamNN/project2/` directory in the venv:
+    python variant1.py
+    python variant2.py
+    python variant3.py
+    python variant4.py
+    python variant5.py
+- These scripts load `map.txt` by default and start the pygame window.
+
+Usage: Batch Testing with run_variants.py
+-----------------------------------------
+- Headless repeated runs with success rate reporting:
+  Examples (from `teamNN/project2/`):
+    # Variant 0: bottom-start navigation (Character1 with model)
+    python run_variants.py --variant 0 --count 50 --headless --wait-ms 0
+    # Variant 1..5: project scenarios
+    python run_variants.py --variant 3 --count 100 --headless --wait-ms 0
+- Output includes successes and success_rate for quick evaluation.
+
+Usage: Train DQN (Project 2)
+----------------------------
+- From `teamNN/project2/` in the venv:
+    # Train on default `map.txt`, 600k steps
+    python train_dqn.py --timesteps 600000
+    # Train on alternative map
+    python train_dqn.py --map .\map0.txt --timesteps 800000 --seed 42
+- Artifacts:
+  - TensorBoard logs at `teamNN/project2/tb/` (run: `tensorboard --logdir tb`).
+  - Checkpoints and best model in `--save_path` (default `teamNN/project2/dqn_model`). Final model saved as `final.zip`.
+
+Usage: Integrate Trained Model in Characters
+--------------------------------------------
+- For `character5.py`/`character6.py`, ensure the model file exists. Default expected path noted in this file: `teamNN/project2/models/best_model.zip`.
+- Override by passing `model_path` to the character constructor where applicable (e.g., in a variant or in `run_variants.py`).
+
+Maps
+----
+- `teamNN/project2/map.txt`: 18×10 with staggered walls and exit at far right bottom.
+- `teamNN/project2/map0.txt`: 16×20 with horizontal full-width walls creating bottom bands; used for bottom-start training.
+- Map header format: first 4 lines are `max_time`, `bomb_time`, `expl_duration`, `expl_range`, followed by ASCII grid. Only one `E` allowed.
+
+Reporting Notes
+---------------
+- Cite engine responsibilities clearly: state update in `World/update_*`, rendering in `Game.display_gui`, AI action timing via `RealWorld.next_decisions`.
+- Emphasize safety modeling: predicted unsafe tiles from bombs/explosions during observation construction in `utils.build_observation`.
+- Training configuration highlights: large replay buffer (500k), slow discount (γ≈0.9999), dueling enabled when supported.
+- Evaluation: use `--headless` to remove rendering overhead for stable throughput; fix `--seed` for reproducibility when needed.
