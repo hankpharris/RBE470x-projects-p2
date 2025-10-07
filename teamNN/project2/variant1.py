@@ -21,9 +21,9 @@ g = Game.fromfile('map.txt')
 #                            model_path='models/best_model.zip'  # model
 # ))
 
-from character2 import Character2
+from character5 import Character5
 
-g.add_character(Character2("me", # name
+g.add_character(Character5("me", # name
                            "C",  # avatar
                            0, 0  # position
 ))
