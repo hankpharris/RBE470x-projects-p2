@@ -20,10 +20,17 @@ g.add_monster(StupidMonster("stupid", # name
                             3, 9      # position
 ))
 
-# TODO Add your character
-g.add_character(TestCharacter("me", # name
-                              "C",  # avatar
-                              0, 0  # position
+# # TODO Add your character
+# g.add_character(TestCharacter("me", # name
+#                               "C",  # avatar
+#                               0, 0  # position
+# ))
+
+from character5 import Character5
+
+g.add_character(Character5("me", # name
+                           "C",  # avatar
+                           0, 0  # position
 ))
 
 # Run!
