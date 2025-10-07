@@ -1,6 +1,7 @@
 import os
 import sys
 from typing import Optional, Tuple, Dict, Any, List, Set
+import random
 
 import numpy as np
 
@@ -48,10 +49,16 @@ class BombermanProject2Env(gym.Env):
     metadata = {"render_modes": ["ansi"], "render_fps": 10}
 
     def __init__(self, map_path: str = os.path.join(os.path.dirname(__file__), 'map.txt'),
-                 render_mode: Optional[str] = None):
+                 render_mode: Optional[str] = None,
+                 bottom_start: bool = True,
+                 randomize_bottom_start: bool = True,
+                 simple_reward: bool = True):
         super().__init__()
         self.map_path = map_path
         self.render_mode = render_mode
+        self.bottom_start = bottom_start
+        self.randomize_bottom_start = randomize_bottom_start
+        self.simple_reward = simple_reward
 
         # World template used to infer sizes
         tmp_world = parse_map_to_world(self.map_path)
@@ -71,18 +78,46 @@ class BombermanProject2Env(gym.Env):
 
     def _spawn_world(self) -> None:
         self.world = parse_map_to_world(self.map_path)
-        # Place agent at (0,0) unless blocked; otherwise find first empty cell scanning rows
-        start_x, start_y = 0, 0
-        if self.world.wall_at(start_x, start_y):
-            placed = False
+        # Determine start position
+        if not self.bottom_start:
+            # Place agent at (0,0) unless blocked; otherwise find first empty cell scanning rows
+            start_x, start_y = 0, 0
+            if self.world.wall_at(start_x, start_y):
+                placed = False
+                for y in range(self.world.height()):
+                    for x in range(self.world.width()):
+                        if self.world.empty_at(x, y):
+                            start_x, start_y = x, y
+                            placed = True
+                            break
+                    if placed:
+                        break
+        else:
+            # Compute bottom section minimum y as one row below the lowest full-width wall
+            wall_rows: List[int] = []
             for y in range(self.world.height()):
+                full_wall = True
+                for x in range(self.world.width()):
+                    if not self.world.wall_at(x, y):
+                        full_wall = False
+                        break
+                if full_wall:
+                    wall_rows.append(y)
+            min_bottom_y = (max(wall_rows) + 1) if wall_rows else 0
+            # Collect empty cells in bottom section
+            candidates: List[Tuple[int, int]] = []
+            for y in range(min_bottom_y, self.world.height()):
                 for x in range(self.world.width()):
                     if self.world.empty_at(x, y):
-                        start_x, start_y = x, y
-                        placed = True
-                        break
-                if placed:
-                    break
+                        candidates.append((x, y))
+            if not candidates:
+                start_x, start_y = 0, 0
+            else:
+                if self.randomize_bottom_start:
+                    start_x, start_y = random.choice(candidates)
+                else:
+                    # Pick deterministic left-most, lowest
+                    start_x, start_y = min(candidates, key=lambda p: (p[0], -p[1]))
         self.me = RLCharacter('me', 'C', start_x, start_y)
         self.world.add_character(self.me)
         # Snapshot score
@@ -117,31 +152,7 @@ class BombermanProject2Env(gym.Env):
     def step(self, action: int):
         assert self.world is not None and self.me is not None
 
-        # Auto-bomb placement: always place a bomb if possible and if it can open path
-        # (external to agent control)
-        has_active_bomb = False
-        for _, b in self.world.bombs.items():
-            if b.owner.name == self.me.name:
-                has_active_bomb = True
-                break
-        if not has_active_bomb:
-            # If a bomb would hit a wall from current position, place it automatically
-            def will_hit_wall():
-                x0, y0 = self.me.x, self.me.y
-                for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
-                    xx, yy = x0 + dx, y0 + dy
-                    r = 0
-                    while (r < self.world.expl_range and 0 <= xx < self.world.width() and 0 <= yy < self.world.height()):
-                        if self.world.exit_at(xx, yy) or self.world.bomb_at(xx, yy):
-                            break
-                        if self.world.wall_at(xx, yy):
-                            return True
-                        xx += dx
-                        yy += dy
-                        r += 1
-                return False
-            if will_hit_wall():
-                self.me.place_bomb()
+        # No bomb placement in simplified navigation training
 
         # Set action for this tick
         self.me.set_action(int(action))
@@ -193,34 +204,20 @@ class BombermanProject2Env(gym.Env):
                 reward += 2.0 * (self._last_dist - cur_dist)
             self._last_dist = cur_dist
 
-        # One-time depth milestone: reward new best (lowest) y reached this run
-        if cur_pos is not None and self._best_y_reached is not None:
-            cy = cur_pos[1]
-            if cy > self._best_y_reached:
-                height = self.world.height()
-                depth_norm = float(cy + 1) / float(max(1, height))
-                depth_bonus = 8.0 * (1.0 + 2.0 * depth_norm)
-                reward += depth_bonus
-                self._best_y_reached = cy
+        # One-time depth milestone: reward new best (lowest) y reached this run (optional)
+        if not self.simple_reward:
+            if cur_pos is not None and self._best_y_reached is not None:
+                cy = cur_pos[1]
+                if cy > self._best_y_reached:
+                    height = self.world.height()
+                    depth_norm = float(cy + 1) / float(max(1, height))
+                    depth_bonus = 8.0 * (1.0 + 2.0 * depth_norm)
+                    reward += depth_bonus
+                    self._best_y_reached = cy
 
         # No per-step offset, no extra wall bonuses: keep schema minimal
 
-        # Death penalty (keep strong sabotage deterrent)
-        if terminated and not truncated:
-            # Determine cause when possible
-            self_kill = False
-            killed_by_monster = False
-            for e in events:
-                if e.tpe == Event.BOMB_HIT_CHARACTER and e.character.name == self.me.name and e.other and e.other.name == self.me.name:
-                    self_kill = True
-                if e.tpe == Event.CHARACTER_KILLED_BY_MONSTER and e.character.name == self.me.name:
-                    killed_by_monster = True
-            if self_kill:
-                reward -= 100.0
-            elif killed_by_monster:
-                reward -= 100.0
-            else:
-                reward -= 100.0
+        # No death penalty in safe simplified navigation
 
         # Update last action tuple (dx,dy,bomb=0 as bombs are auto)
         dx, dy, _ = decode_action(int(action))

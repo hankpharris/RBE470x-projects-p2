@@ -16,6 +16,7 @@ from .env import BombermanProject2Env
 
 def make_env(map_path: str):
     def _thunk():
+        # Use environment defaults (bottom_start=True, randomize=True, simple_reward=True)
         env = BombermanProject2Env(map_path=map_path, render_mode=None)
         env = Monitor(env)
         return env

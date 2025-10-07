@@ -21,6 +21,7 @@ from monsters.selfpreserving_monster import SelfPreservingMonster
 # Characters (from this team repo)
 from character2 import Character2
 from character3 import Character3
+from character1 import Character1
 
 
 def build_game_for_variant(variant):
@@ -29,7 +30,22 @@ def build_game_for_variant(variant):
 	map_path = os.path.join(_HERE, 'map.txt')
 	g = Game.fromfile(map_path)
 	
-	if variant == 1:
+	if variant == 0:
+		# Variant 0 (training/testing): bottom-section start, no monsters
+		# Spawn randomly within rows y in {15,16,17}
+		candidates = []
+		for y in [15, 16, 17]:
+			if 0 <= y < g.world.height():
+				for x in range(g.world.width()):
+					if g.world.empty_at(x, y):
+						candidates.append((x, y))
+		if candidates:
+			start_x, start_y = random.choice(candidates)
+		else:
+			start_x, start_y = 0, 0
+		g.add_character(Character1("me", "C", start_x, start_y, model_path='models/best_model.zip'))
+		return g
+	elif variant == 1:
 		# Variant 1 (project 2): Alone in the world
 		g.add_character(Character2("me", "C", 0, 0))
 		return g
@@ -94,7 +110,7 @@ def run_episode(variant, wait_ms=1):
 
 def main():
 	parser = argparse.ArgumentParser(description="Run Bomberman variants repeatedly and report success rate")
-	parser.add_argument("--variant", type=int, required=True, choices=[1,2,3,4,5], help="Variant number to run (1-5)")
+	parser.add_argument("--variant", type=int, required=True, choices=[0,1,2,3,4,5], help="Variant number to run (0-5)")
 	parser.add_argument("--count", type=int, default=10, help="Number of episodes to run")
 	parser.add_argument("--headless", action="store_true", help="Run without opening a window for speed")
 	parser.add_argument("--wait-ms", type=int, default=1, help="Milliseconds to wait per tick (>=0)")

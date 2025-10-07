@@ -34,35 +34,10 @@ class Character1(CharacterEntity):
         if self.model is None:
             self.move(0, 0)
             return
-        # Auto-bomb: place a bomb if it would hit a wall and no bomb is active for me
-        def has_active_bomb() -> bool:
-            for _, b in wrld.bombs.items():
-                if b.owner.name == self.name:
-                    return True
-            return False
-
-        def will_hit_wall() -> bool:
-            x0, y0 = wrld.me(self).x, wrld.me(self).y
-            for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
-                xx, yy = x0 + dx, y0 + dy
-                r = 0
-                while (r < wrld.expl_range and 0 <= xx < wrld.width() and 0 <= yy < wrld.height()):
-                    if wrld.exit_at(xx, yy) or wrld.bomb_at(xx, yy):
-                        break
-                    if wrld.wall_at(xx, yy):
-                        return True
-                    xx += dx
-                    yy += dy
-                    r += 1
-            return False
-
-        if not has_active_bomb() and will_hit_wall():
-            self.place_bomb()
-
         obs = build_observation(wrld, self.name)
         action, _ = self.model.predict(obs, deterministic=True)
         dx, dy, bomb = decode_action(int(action))
         self.move(dx, dy)
-        # Bombs are auto-placed; ignore model bomb flag
+        # Ignore any bomb flag; bombs are disabled in simplified navigation
 
 
